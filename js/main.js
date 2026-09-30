@@ -9,6 +9,7 @@
   function load(){ try { return JSON.parse(localStorage.getItem(STORE)) || []; } catch(e){ return []; } }
   function save(){ try { localStorage.setItem(STORE, JSON.stringify(bindings)); } catch(e){} }
   function status(t){ $('status').textContent = t; }
+  window.onerror = function(m){ status('Erreur JS : ' + m); };
 
   function host(fn, arg, cb){
     var call = fn + '(' + (arg === undefined ? '' : JSON.stringify(typeof arg === 'string' ? arg : JSON.stringify(arg))) + ')';
@@ -163,7 +164,7 @@
     var jsx = cs.getSystemPath('extension') + '/jsx/host.jsx';
     cs.evalScript('$.evalFile(' + JSON.stringify(jsx) + ')', function(){ location.reload(); });
   }
-  $('reload').onclick = reloadAll;
+  $('reload').onclick = function(){ status('Rechargement…'); setTimeout(reloadAll, 150); };
 
   function gh(https, path, token, raw, cb){
     var h = {'User-Agent': 'ExcaliburLXT', 'Accept': raw ? 'application/vnd.github.raw' : 'application/vnd.github+json'};
@@ -184,12 +185,15 @@
     catch(e){ return status('Node.js indisponible dans ce panneau.'); }
     var repo = $('upRepo').value.trim(), br = $('upBranch').value.trim(), tok = $('upToken').value.trim();
     var root = cs.getSystemPath('extension');
-    status('Mise à jour…');
+    status('Mise à jour… connexion à GitHub (' + repo + ', ' + br + ')');
+    var guard = setTimeout(function(){ status('Pas de réponse de GitHub après 20 s (réseau bloqué ?).'); }, 20000);
     gh(https, '/repos/' + repo + '/git/trees/' + encodeURIComponent(br) + '?recursive=1', tok, false, function(err, buf){
+      clearTimeout(guard);
       if (err) return status(err.message + (tok ? '' : ' — dépôt privé ? ajoutez un jeton'));
       var files = JSON.parse(buf.toString()).tree.filter(function(t){ return t.type === 'blob' && !/^\.git/.test(t.path); });
       var got = {}, left = files.length, failed = null;
       if (!left) return status('Aucun fichier trouvé.');
+      status('Téléchargement de ' + left + ' fichiers…');
       files.forEach(function(f){
         gh(https, '/repos/' + repo + '/contents/' + f.path.split('/').map(encodeURIComponent).join('/') + '?ref=' + encodeURIComponent(br), tok, true, function(e, data){
           if (e) failed = failed || e; else got[f.path] = data;
@@ -205,7 +209,8 @@
             fs.writeFileSync(dest, got[p]);
           });
           if (manifestChanged) return status('Mis à jour — manifest modifié : redémarrez Première Pro.');
-          reloadAll();
+          status('Mis à jour (' + Object.keys(got).length + ' fichiers), rechargement…');
+          setTimeout(reloadAll, 400);
         });
       });
     });
