@@ -25,6 +25,7 @@
     if (/^Digit\d$/.test(c)) k = c.slice(5);
     else if (/^Numpad/.test(c)) k = 'Num' + c.slice(6);
     else if (/^F\d+$/.test(c)) k = c;
+    else if (e.altKey && /^Key[A-Z]$/.test(c)) k = c.slice(3);
     else if (e.key === ' ') k = 'Space';
     else if (e.key.length === 1) k = e.key.toUpperCase();
     else k = e.key;
@@ -248,6 +249,30 @@
         });
       });
     });
+  };
+
+  function freeKeys(){
+    var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), digits = '0123456789'.split(''), i;
+    var fk = [], num = [], sym = ['<','>',',',';',':','!','?','.','/','\\','-','=','[',']',"'",'`','+','*'];
+    for (i = 1; i <= 12; i++) fk.push('F' + i);
+    for (i = 0; i <= 9; i++) num.push('Num' + i);
+    function free(list, mod){ return list.map(function(k){ return mod + k; }).filter(function(k){ return !isReserved(k); }); }
+    return [
+      ['Touches seules', free(digits, '').concat(free(fk, ''), free(num, ''), free(sym, ''))],
+      ['Maj + chiffre / F', free(digits, 'Shift+').concat(free(fk, 'Shift+'))],
+      ['Alt + lettre / chiffre / F', free(letters, 'Alt+').concat(free(digits, 'Alt+'), free(fk, 'Alt+'))],
+      ['Maj + lettre', free(letters, 'Shift+')],
+      ['Ctrl + chiffre / F', free(digits, 'Ctrl+').concat(free(fk, 'Ctrl+'))],
+      ['Ctrl + Alt + lettre', free(letters, 'Ctrl+Alt+')],
+      ['Ctrl + Maj + chiffre / F', free(digits, 'Ctrl+Shift+').concat(free(fk, 'Ctrl+Shift+'))]
+    ];
+  }
+  $('free').innerHTML = freeKeys().filter(function(g){ return g[1].length; }).map(function(g){
+    return '<div class="grp">' + g[0] + '</div>' + g[1].map(function(k){ return '<span>' + k + '</span>'; }).join('');
+  }).join('');
+  $('free').onclick = function(e){
+    if (e.target.tagName !== 'SPAN') return;
+    pendingKey = e.target.textContent; $('keyField').value = pendingKey; setKeyMsg('Touche libre.', true);
   };
 
   $('reserved').innerHTML = window.RESERVED_KEYS.map(function(k){ return '<span>' + k + '</span>'; }).join('');
