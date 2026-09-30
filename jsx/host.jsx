@@ -65,24 +65,29 @@ function _qeClipFor(seq, trackIdx, clip){
   return null;
 }
 
-function _restoreEffects(seq, trackIdx, clip, effects){
+// intrinsicOnly : ne réapplique que les valeurs des composants déjà présents (Mouvement, Opacité...)
+// sans ajouter d'effet. Retourne {ok, fail, err}.
+function _restoreEffects(seq, trackIdx, clip, effects, intrinsicOnly){
   app.enableQE();
-  var qc = _qeClipFor(seq, trackIdx, clip), i, j, e, comp, pr;
+  var st = {ok: 0, fail: 0, err: ''};
+  var qc = intrinsicOnly ? null : _qeClipFor(seq, trackIdx, clip), i, j, e, comp, pr;
   for (i = 0; i < effects.length; i++){
     e = effects[i];
     comp = (i < clip.components.numItems && clip.components[i].displayName === e.n) ? clip.components[i] : null;
     if (!comp){
-      if (!qc) continue;
+      if (intrinsicOnly || !qc) continue;
       var fx = qe.project.getVideoEffectByName(e.n);
-      if (!fx) continue;
+      if (!fx){ st.err = st.err || ('effet introuvable : ' + e.n); continue; }
       qc.addVideoEffect(fx);
       comp = clip.components[clip.components.numItems - 1];
     }
     for (j = 0; j < e.p.length; j++){
       pr = e.p[j];
-      try { comp.properties[pr.i].setValue(pr.v, true); } catch (x) {}
+      try { comp.properties[pr.i].setValue(pr.v, true); st.ok++; }
+      catch (x) { st.fail++; st.err = st.err || (e.n + ' : ' + x); }
     }
   }
+  return st;
 }
 
 // Capture les clips/calques sélectionnés.
@@ -105,13 +110,40 @@ function captureSelection(){
   } catch (e) { return _err(e.message || e); }
 }
 
+function _removeLinkedAudio(seq, pos, nodeId){
+  var a, c, cl, n = 0;
+  for (a = 0; a < seq.audioTracks.numTracks; a++){
+    var tr = seq.audioTracks[a];
+    for (c = tr.clips.numItems - 1; c >= 0; c--){
+      cl = tr.clips[c];
+      if (Math.abs(cl.start.seconds - pos) < 0.001 && cl.projectItem && cl.projectItem.nodeId === nodeId){
+        try { cl.remove(false, false); n++; } catch (e) {}
+      }
+    }
+  }
+  return n;
+}
+
 // spec = {layers:[{nodeId,track,duration,effects}], keepEffects:bool}
-// Pose tous les calques à la tête de lecture, sur leur piste d'origine.
+// Pose tous les calques à la tête de lecture, sur leur piste d'origine (vidéo seulement).
 function applyLayers(specStr){
+  var untargeted = [];
+  var seq = null;
   try {
-    var spec = eval('(' + specStr + ')'), seq = _seq(), pos = seq.getPlayerPosition().seconds;
-    var i, L, item, tr, c, cl, placed = 0, skipped = [], t;
+    var spec = eval('(' + specStr + ')');
+    seq = _seq();
+    var pos = seq.getPlayerPosition().seconds;
+    var i, L, item, tr, c, cl, placed = 0, skipped = [], t, a;
+    var stats = {ok: 0, fail: 0, err: ''}, audioRemoved = 0, endErr = '';
     app.enableQE();
+
+    // Empêche l'audio lié d'être posé : on dé-cible les pistes audio le temps de l'opération.
+    for (a = 0; a < seq.audioTracks.numTracks; a++){
+      try {
+        if (seq.audioTracks[a].isTargeted()){ untargeted.push(a); seq.audioTracks[a].setTargeted(false, true); }
+      } catch (e0) {}
+    }
+
     for (i = 0; i < spec.layers.length; i++){
       L = spec.layers[i];
       item = _findItem(app.project.rootItem, L.nodeId);
@@ -119,18 +151,27 @@ function applyLayers(specStr){
       var ti = Math.min(L.track, seq.videoTracks.numTracks - 1);
       tr = seq.videoTracks[ti];
       tr.overwriteClip(item, pos);
+      audioRemoved += _removeLinkedAudio(seq, pos, L.nodeId);
       cl = null;
       for (c = 0; c < tr.clips.numItems; c++){
         if (Math.abs(tr.clips[c].start.seconds - pos) < 0.001){ cl = tr.clips[c]; break; }
       }
       if (!cl) continue;
       t = new Time(); t.seconds = pos + L.duration;
-      try { cl.end = t; } catch (e1) {}
-      if (spec.keepEffects && L.effects) _restoreEffects(seq, ti, cl, L.effects);
+      try { cl.end = t; } catch (e1) { endErr = String(e1); }
+      if (L.effects){
+        var r = _restoreEffects(seq, ti, cl, L.effects, !spec.keepEffects);
+        stats.ok += r.ok; stats.fail += r.fail; stats.err = stats.err || r.err;
+      }
       placed++;
     }
-    return _ok({placed: placed, skipped: skipped});
-  } catch (e) { return _err(e.message || e); }
+    for (a = 0; a < untargeted.length; a++){ try { seq.audioTracks[untargeted[a]].setTargeted(true, true); } catch (e2) {} }
+    return _ok({placed: placed, skipped: skipped, valuesOk: stats.ok, valuesFail: stats.fail,
+                err: stats.err || endErr, audioRemoved: audioRemoved});
+  } catch (e) {
+    try { if (seq) for (a = 0; a < untargeted.length; a++) seq.audioTracks[untargeted[a]].setTargeted(true, true); } catch (e3) {}
+    return _err(e.message || e);
+  }
 }
 
 // Applique un effet vidéo aux clips sélectionnés.

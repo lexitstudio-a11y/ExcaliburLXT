@@ -131,7 +131,11 @@
       host('applyEffect', b.effect, function(r){ status(r.ok ? 'Effet appliqué à ' + r.data.applied + ' clip(s)' : r.error); });
     else
       host('applyLayers', {layers: b.layers, keepEffects: b.keepEffects}, function(r){
-        status(r.ok ? r.data.placed + ' calque(s) posé(s)' + (r.data.skipped.length ? ' — introuvable(s) : ' + r.data.skipped.join(', ') : '') : r.error);
+        status(!r.ok ? r.error : r.data.placed + ' calque(s) posé(s)' +
+          ' · valeurs copiées : ' + r.data.valuesOk + (r.data.valuesFail ? ' (échecs : ' + r.data.valuesFail + ')' : '') +
+          (r.data.audioRemoved ? ' · audio retiré : ' + r.data.audioRemoved : '') +
+          (r.data.err ? ' · ' + r.data.err : '') +
+          (r.data.skipped.length ? ' — introuvable(s) : ' + r.data.skipped.join(', ') : ''));
       });
   }
 
