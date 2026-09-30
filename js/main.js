@@ -65,12 +65,15 @@
     });
   }
 
-  $('capture').onclick = function(){
+  function capture(done){
     host('captureSelection', undefined, function(r){
-      if (!r.ok) return status(r.error);
+      if (!r.ok){ status(r.error); setKeyMsg(r.error); return done && done(false); }
       captured = r.data; renderCaptured(); status(captured.length + ' calque(s) capturé(s)');
+      setKeyMsg(captured.length + ' calque(s) capturé(s).', true);
+      if (done) done(true);
     });
-  };
+  }
+  $('capture').onclick = function(){ capture(); };
 
   $('fromSel').onclick = function(){
     host('selectedEffectNames', undefined, function(r){
@@ -82,6 +85,11 @@
   };
 
   $('save').onclick = function(){
+    if ($('type').value === 'layers' && !captured.length && pendingKey && !isReserved(pendingKey))
+      return capture(function(ok){ if (ok) save1(); });
+    save1();
+  };
+  function save1(){
     if (!pendingKey) return setKeyMsg('Choisissez une touche libre.');
     var b = {key: pendingKey};
     if ($('type').value === 'layers'){
@@ -95,7 +103,7 @@
     bindings = bindings.filter(function(x){ return x.key !== b.key; });
     bindings.push(b); save(); render();
     captured = []; renderCaptured(); pendingKey = ''; $('keyField').value = ''; setKeyMsg('Assigné.', true);
-  };
+  }
 
   function describe(b){
     if (b.type === 'effect') return 'Effet : ' + b.effect;
