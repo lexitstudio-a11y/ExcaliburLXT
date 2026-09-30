@@ -140,9 +140,9 @@
   }
 
   document.addEventListener('keydown', function(e){
-    if (!$('armed').checked) return;
+    if (!$('armed').checked){ status('Touche reçue mais « Raccourcis actifs » est décoché.'); return; }
     var t = e.target.tagName;
-    if (t === 'INPUT' && e.target.type !== 'checkbox' || t === 'SELECT') return;
+    if (t === 'INPUT' && e.target.type !== 'checkbox' && !e.target.readOnly || t === 'SELECT') return;
     var k = combo(e); if (!k) return;
     var b = bindings.filter(function(x){ return x.key === k; })[0];
     status('Touche reçue : ' + k + (b ? '' : ' (non assignée)'));
