@@ -4,7 +4,10 @@ CSInterface.prototype.evalScript = function(script, cb){
   window.__adobe_cep__.evalScript(script, cb || function(){});
 };
 CSInterface.prototype.getSystemPath = function(type){
-  return decodeURI(JSON.parse(window.__adobe_cep__.getSystemPath(type)));
+  var p = decodeURI(window.__adobe_cep__.getSystemPath(type));
+  p = p.replace(/^file:\/\//, '');
+  if (/^\/[A-Za-z]:\//.test(p)) p = p.slice(1); // Windows : /C:/... -> C:/...
+  return p;
 };
 CSInterface.prototype.registerKeyEventsInterest = function(json){
   return window.__adobe_cep__.registerKeyEventsInterest(json);
