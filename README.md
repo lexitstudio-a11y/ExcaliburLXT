@@ -10,6 +10,7 @@ Assigne des touches libres à des **calques** ou à des **effets**.
 3. Les touches déjà utilisées par Première Pro (`js/reserved.js`, à ajuster à votre préréglage) sont refusées.
 
 ## Installation
+Raccourci : téléchargez le ZIP du dépôt (GitHub > Code > Download ZIP, branche voulue), décompressez, puis lancez `install-windows.bat` ou `install-mac.command`. Sinon, en manuel :
 1. Copier ce dossier dans `%APPDATA%\Adobe\CEP\extensions\ExcaliburLXT` (Windows) ou `~/Library/Application Support/Adobe/CEP/extensions/ExcaliburLXT` (macOS).
 2. Extensions non signées : activer `PlayerDebugMode=1` (macOS : `defaults write com.adobe.CSXS.11 PlayerDebugMode 1` ; Windows : clé `HKCU\Software\Adobe\CSXS.11`, valeur chaîne `PlayerDebugMode` = `1` ; adapter le numéro CSXS à votre version).
 3. Redémarrer Première Pro → Fenêtre > Extensions > ExcaliburLXT.
