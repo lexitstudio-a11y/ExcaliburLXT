@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>ExcaliburLXT</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <label class="armed"><input type="checkbox" id="armed" checked> Raccourcis actifs</label>
+  <span id="status">Prêt</span>
+</header>
+
+<section>
+  <h2>Nouvelle assignation</h2>
+
+  <div class="row">
+    <label>Type</label>
+    <select id="type">
+      <option value="layers">Calque(s) sélectionné(s) dans la timeline</option>
+      <option value="effect">Effet</option>
+    </select>
+  </div>
+
+  <div id="layersOpts">
+    <p class="hint">Sélectionnez un ou plusieurs clips/calques (ex. calques d'effet) dans la timeline, puis « Capturer ».
+      Tous seront assignés à la même touche et posés ensemble à la position de la tête de lecture.</p>
+    <label class="check"><input type="checkbox" id="keepEffects"> Conserver aussi l'effet présent dans le calque</label>
+    <button id="capture">Capturer la sélection</button>
+    <ul id="captured"></ul>
+  </div>
+
+  <div id="effectOpts" hidden>
+    <div class="row"><label>Nom de l'effet</label><input id="effectName" list="effectList" placeholder="ex. Flou gaussien"></div>
+    <datalist id="effectList"></datalist>
+    <button id="fromSel">Lister les effets du clip sélectionné</button>
+    <p class="hint">Le nom doit correspondre exactement à celui du panneau Effets. L'effet est appliqué aux clips sélectionnés.</p>
+  </div>
+
+  <div class="row">
+    <label>Touche</label>
+    <input id="keyField" readonly placeholder="Cliquez puis appuyez sur la touche…">
+    <button id="clearKey" title="Effacer">✕</button>
+  </div>
+  <div id="keyMsg" class="msg"></div>
+  <button id="save" class="primary">Assigner</button>
+</section>
+
+<section>
+  <h2>Assignations</h2>
+  <ul id="bindings"></ul>
+</section>
+
+<section>
+  <details>
+    <summary>Touches réservées par Première Pro</summary>
+    <p class="hint">Modifiable dans <code>js/reserved.js</code>. Ces touches sont refusées.</p>
+    <div id="reserved"></div>
+  </details>
+</section>
+
+<script src="js/CSInterface.js"></script>
+<script src="js/reserved.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
