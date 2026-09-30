@@ -170,17 +170,48 @@
   }
   $('reload').onclick = function(){ status('Rechargement…'); setTimeout(reloadAll, 150); };
 
-  function gh(https, path, token, raw, cb){
-    var h = {'User-Agent': 'ExcaliburLXT', 'Accept': raw ? 'application/vnd.github.raw' : 'application/vnd.github+json'};
+  function req(https, host, path, token, accept, cb){
+    var h = {'User-Agent': 'ExcaliburLXT'};
+    if (accept) h.Accept = accept;
     if (token) h.Authorization = 'Bearer ' + token;
-    https.get({hostname: 'api.github.com', path: path, headers: h}, function(res){
+    https.get({hostname: host, path: path, headers: h}, function(res){
       var chunks = [];
       res.on('data', function(c){ chunks.push(c); });
       res.on('end', function(){
-        if (res.statusCode !== 200) return cb(new Error('GitHub ' + res.statusCode + ' (' + path.split('?')[0] + ')'));
+        if (res.statusCode !== 200){
+          var msg = 'GitHub ' + res.statusCode + ' (' + path.split('?')[0] + ')';
+          if (res.statusCode === 403 && res.headers['x-ratelimit-remaining'] === '0')
+            msg = 'Limite de requêtes GitHub atteinte (réessayez vers ' +
+              new Date(res.headers['x-ratelimit-reset'] * 1000).toLocaleTimeString() + ' ou ajoutez un jeton)';
+          return cb(new Error(msg));
+        }
         cb(null, Buffer.concat(chunks));
       });
     }).on('error', cb);
+  }
+
+  // Sans jeton : raw.githubusercontent.com (pas de limite d'API) + liste files.txt.
+  // Avec jeton : API GitHub (dépôts privés).
+  function listFiles(https, repo, br, tok, cb){
+    if (!tok){
+      var enc = br.split('/').map(encodeURIComponent).join('/');
+      return req(https, 'raw.githubusercontent.com', '/' + repo + '/' + enc + '/files.txt', '', '', function(err, buf){
+        if (err) return cb(err);
+        cb(null, buf.toString().split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean));
+      });
+    }
+    req(https, 'api.github.com', '/repos/' + repo + '/git/trees/' + encodeURIComponent(br) + '?recursive=1', tok, 'application/vnd.github+json', function(err, buf){
+      if (err) return cb(err);
+      cb(null, JSON.parse(buf.toString()).tree.filter(function(t){ return t.type === 'blob' && !/^\.git/.test(t.path); })
+        .map(function(t){ return t.path; }));
+    });
+  }
+  function getFile(https, repo, br, tok, path, cb){
+    if (!tok){
+      var enc = br.split('/').map(encodeURIComponent).join('/');
+      return req(https, 'raw.githubusercontent.com', '/' + repo + '/' + enc + '/' + path.split('/').map(encodeURIComponent).join('/'), '', '', cb);
+    }
+    req(https, 'api.github.com', '/repos/' + repo + '/contents/' + path.split('/').map(encodeURIComponent).join('/') + '?ref=' + encodeURIComponent(br), tok, 'application/vnd.github.raw', cb);
   }
 
   $('update').onclick = function(){
@@ -191,16 +222,15 @@
     var root = cs.getSystemPath('extension');
     status('Mise à jour… connexion à GitHub (' + repo + ', ' + br + ')');
     var guard = setTimeout(function(){ status('Pas de réponse de GitHub après 20 s (réseau bloqué ?).'); }, 20000);
-    gh(https, '/repos/' + repo + '/git/trees/' + encodeURIComponent(br) + '?recursive=1', tok, false, function(err, buf){
+    listFiles(https, repo, br, tok, function(err, paths){
       clearTimeout(guard);
       if (err) return status(err.message + (tok ? '' : ' — dépôt privé ? ajoutez un jeton'));
-      var files = JSON.parse(buf.toString()).tree.filter(function(t){ return t.type === 'blob' && !/^\.git/.test(t.path); });
-      var got = {}, left = files.length, failed = null;
+      var got = {}, left = paths.length, failed = null;
       if (!left) return status('Aucun fichier trouvé.');
       status('Téléchargement de ' + left + ' fichiers…');
-      files.forEach(function(f){
-        gh(https, '/repos/' + repo + '/contents/' + f.path.split('/').map(encodeURIComponent).join('/') + '?ref=' + encodeURIComponent(br), tok, true, function(e, data){
-          if (e) failed = failed || e; else got[f.path] = data;
+      paths.forEach(function(f){
+        getFile(https, repo, br, tok, f, function(e, data){
+          if (e) failed = failed || e; else got[f] = data;
           if (--left) return;
           if (failed) return status('Échec : ' + failed.message);
           var manifestChanged = false;

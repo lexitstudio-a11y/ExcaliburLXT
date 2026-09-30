@@ -19,6 +19,7 @@ Raccourci : téléchargez le ZIP du dépôt (GitHub > Code > Download ZIP, branc
 - **↻ Recharger** : relit les fichiers locaux (panneau + script Première Pro) sans redémarrer.
 - **⬇ Mettre à jour** : télécharge la dernière version depuis GitHub dans le dossier de l'extension puis recharge. Renseignez dépôt, branche et, si le dépôt est privé, un jeton GitHub en lecture (section « Mise à jour »). Si `CSXS/manifest.xml` change, redémarrez Première Pro.
 - Vos assignations sont conservées lors d'une mise à jour.
+- Sans jeton, la mise à jour lit `files.txt` (liste des fichiers du plugin) via raw.githubusercontent.com, sans limite d'API. Tenez `files.txt` à jour quand un fichier est ajouté ou supprimé.
 
 ## Limites (API Adobe)
 - Les touches ne sont interceptées que lorsque le **panneau a le focus** : CEP ne peut pas enregistrer de raccourci global. Cliquez dans le panneau (ou dockez-le) avant d'utiliser les touches.
