@@ -140,6 +140,67 @@
       Array.apply(null, Array(256)).map(function(_, i){ return {keyCode: i}; })));
   } catch(e){}
 
+  // ---- rechargement / mise à jour ----
+  function nodeReq(m){ return (window.cep_node && window.cep_node.require ? window.cep_node.require : window.require)(m); }
+  var SET = 'excaliburlxt.update';
+  var cfg = {}; try { cfg = JSON.parse(localStorage.getItem(SET)) || {}; } catch(e){}
+  ['Repo','Branch','Token'].forEach(function(k){
+    var el = $('up' + k); if (cfg[k]) el.value = cfg[k];
+    el.onchange = function(){ cfg[k] = el.value.trim(); try { localStorage.setItem(SET, JSON.stringify(cfg)); } catch(e){} };
+  });
+
+  function reloadAll(){
+    var jsx = cs.getSystemPath('extension') + '/jsx/host.jsx';
+    cs.evalScript('$.evalFile(' + JSON.stringify(jsx) + ')', function(){ location.reload(); });
+  }
+  $('reload').onclick = reloadAll;
+
+  function gh(https, path, token, raw, cb){
+    var h = {'User-Agent': 'ExcaliburLXT', 'Accept': raw ? 'application/vnd.github.raw' : 'application/vnd.github+json'};
+    if (token) h.Authorization = 'Bearer ' + token;
+    https.get({hostname: 'api.github.com', path: path, headers: h}, function(res){
+      var chunks = [];
+      res.on('data', function(c){ chunks.push(c); });
+      res.on('end', function(){
+        if (res.statusCode !== 200) return cb(new Error('GitHub ' + res.statusCode + ' (' + path.split('?')[0] + ')'));
+        cb(null, Buffer.concat(chunks));
+      });
+    }).on('error', cb);
+  }
+
+  $('update').onclick = function(){
+    var https, fs, pathMod;
+    try { https = nodeReq('https'); fs = nodeReq('fs'); pathMod = nodeReq('path'); }
+    catch(e){ return status('Node.js indisponible dans ce panneau.'); }
+    var repo = $('upRepo').value.trim(), br = $('upBranch').value.trim(), tok = $('upToken').value.trim();
+    var root = cs.getSystemPath('extension');
+    status('Mise à jour…');
+    gh(https, '/repos/' + repo + '/git/trees/' + encodeURIComponent(br) + '?recursive=1', tok, false, function(err, buf){
+      if (err) return status(err.message + (tok ? '' : ' — dépôt privé ? ajoutez un jeton'));
+      var files = JSON.parse(buf.toString()).tree.filter(function(t){ return t.type === 'blob' && !/^\.git/.test(t.path); });
+      var got = {}, left = files.length, failed = null;
+      if (!left) return status('Aucun fichier trouvé.');
+      files.forEach(function(f){
+        gh(https, '/repos/' + repo + '/contents/' + f.path.split('/').map(encodeURIComponent).join('/') + '?ref=' + encodeURIComponent(br), tok, true, function(e, data){
+          if (e) failed = failed || e; else got[f.path] = data;
+          if (--left) return;
+          if (failed) return status('Échec : ' + failed.message);
+          var manifestChanged = false;
+          Object.keys(got).forEach(function(p){
+            var dest = pathMod.join(root, p);
+            if (p === 'CSXS/manifest.xml'){
+              try { manifestChanged = fs.readFileSync(dest).toString() !== got[p].toString(); } catch(x){ manifestChanged = true; }
+            }
+            fs.mkdirSync(pathMod.dirname(dest), {recursive: true});
+            fs.writeFileSync(dest, got[p]);
+          });
+          if (manifestChanged) return status('Mis à jour — manifest modifié : redémarrez Première Pro.');
+          reloadAll();
+        });
+      });
+    });
+  };
+
   $('reserved').innerHTML = window.RESERVED_KEYS.map(function(k){ return '<span>' + k + '</span>'; }).join('');
   render();
 })();

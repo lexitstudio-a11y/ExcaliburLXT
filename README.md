@@ -14,6 +14,11 @@ Assigne des touches libres à des **calques** ou à des **effets**.
 2. Extensions non signées : activer `PlayerDebugMode=1` (macOS : `defaults write com.adobe.CSXS.11 PlayerDebugMode 1` ; Windows : clé `HKCU\Software\Adobe\CSXS.11`, valeur chaîne `PlayerDebugMode` = `1` ; adapter le numéro CSXS à votre version).
 3. Redémarrer Première Pro → Fenêtre > Extensions > ExcaliburLXT.
 
+## Mise à jour sans re-télécharger
+- **↻ Recharger** : relit les fichiers locaux (panneau + script Première Pro) sans redémarrer.
+- **⬇ Mettre à jour** : télécharge la dernière version depuis GitHub dans le dossier de l'extension puis recharge. Renseignez dépôt, branche et, si le dépôt est privé, un jeton GitHub en lecture (section « Mise à jour »). Si `CSXS/manifest.xml` change, redémarrez Première Pro.
+- Vos assignations sont conservées lors d'une mise à jour.
+
 ## Limites (API Adobe)
 - Les touches ne sont interceptées que lorsque le **panneau a le focus** : CEP ne peut pas enregistrer de raccourci global. Cliquez dans le panneau (ou dockez-le) avant d'utiliser les touches.
 - Les effets conservés le sont avec leurs valeurs statiques ; les images clés ne sont pas copiées.

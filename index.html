@@ -9,6 +9,10 @@
 <header>
   <label class="armed"><input type="checkbox" id="armed" checked> Raccourcis actifs</label>
   <span id="status">Prêt</span>
+  <span class="btns">
+    <button id="reload" title="Recharger le panneau depuis les fichiers locaux">↻ Recharger</button>
+    <button id="update" title="Télécharger la dernière version depuis GitHub puis recharger">⬇ Mettre à jour</button>
+  </span>
 </header>
 
 <section>
@@ -49,6 +53,16 @@
 <section>
   <h2>Assignations</h2>
   <ul id="bindings"></ul>
+</section>
+
+<section>
+  <details>
+    <summary>Mise à jour (GitHub)</summary>
+    <div class="row"><label>Dépôt</label><input id="upRepo" value="lexitstudio-a11y/ExcaliburLXT"></div>
+    <div class="row"><label>Branche</label><input id="upBranch" value="claude/affectionate-gauss-tz6b6o"></div>
+    <div class="row"><label>Jeton</label><input id="upToken" type="password" placeholder="requis si le dépôt est privé"></div>
+    <p class="hint">Jeton GitHub avec accès en lecture au dépôt (« Contents: read »). Il reste dans ce panneau uniquement.</p>
+  </details>
 </section>
 
 <section>
