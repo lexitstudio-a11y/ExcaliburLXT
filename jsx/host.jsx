@@ -48,7 +48,19 @@ function _snapshotEffects(clip){
     props = [];
     for (j = 0; j < comp.properties.numItems; j++){
       p = comp.properties[j];
-      try { props.push({i: j, v: p.getValue()}); } catch (e) {}
+      var cv = null, item;
+      try {
+        // Les couleurs se lisent avec getColorValue() : [alpha, rouge, vert, bleu] (0-255)
+        var c = p.getColorValue();
+        if (c && c.length === 4 && typeof c[0] === 'number') cv = [c[0], c[1], c[2], c[3]];
+      } catch (e0) {}
+      try {
+        item = {i: j, v: p.getValue()};
+        if (cv) item.c = cv;
+        props.push(item);
+      } catch (e) {
+        if (cv) props.push({i: j, v: null, c: cv});
+      }
     }
     out.push({n: comp.displayName, p: props});
   }
@@ -69,7 +81,11 @@ function _setProps(comp, e, st){
   var j, pr, nm;
   for (j = 0; j < e.p.length; j++){
     pr = e.p[j];
-    try { comp.properties[pr.i].setValue(pr.v, true); st.ok++; }
+    try {
+      if (pr.c) comp.properties[pr.i].setColorValue(pr.c[0], pr.c[1], pr.c[2], pr.c[3], true);
+      else comp.properties[pr.i].setValue(pr.v, true);
+      st.ok++;
+    }
     catch (x) {
       st.fail++;
       nm = ''; try { nm = comp.properties[pr.i].displayName; } catch (y) {}
