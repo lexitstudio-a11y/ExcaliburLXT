@@ -65,27 +65,75 @@ function _qeClipFor(seq, trackIdx, clip){
   return null;
 }
 
+function _setProps(comp, e, st){
+  var j, pr, nm;
+  for (j = 0; j < e.p.length; j++){
+    pr = e.p[j];
+    try { comp.properties[pr.i].setValue(pr.v, true); st.ok++; }
+    catch (x) {
+      st.fail++;
+      nm = ''; try { nm = comp.properties[pr.i].displayName; } catch (y) {}
+      st.err = st.err || (e.n + (nm ? ' / ' + nm : '') + ' : ' + x);
+    }
+  }
+}
+
+// Retrouve le composant que l'on vient d'ajouter (par son nom, sans supposer sa position).
+// Selon la version, Première Pro insère le nouvel effet tout en haut ou tout en bas des effets.
+function _newComponent(clip, name, firstUser, prepend){
+  var i, found = null;
+  for (i = firstUser; i < clip.components.numItems; i++){
+    if (clip.components[i].displayName === name){
+      found = clip.components[i];
+      if (prepend) return found;   // le premier de la liste est le plus récent
+    }
+  }
+  return found;                     // le dernier de la liste est le plus récent
+}
+
 // intrinsicOnly : ne réapplique que les valeurs des composants déjà présents (Mouvement, Opacité...)
 // sans ajouter d'effet. Retourne {ok, fail, err}.
 function _restoreEffects(seq, trackIdx, clip, effects, intrinsicOnly){
   app.enableQE();
   var st = {ok: 0, fail: 0, err: ''};
-  var qc = intrinsicOnly ? null : _qeClipFor(seq, trackIdx, clip), i, j, e, comp, pr;
+  var n0 = clip.components.numItems;      // composants natifs de ce clip neuf
+  var i, e, comp, extras = [];
+
   for (i = 0; i < effects.length; i++){
     e = effects[i];
-    comp = (i < clip.components.numItems && clip.components[i].displayName === e.n) ? clip.components[i] : null;
-    if (!comp){
-      if (intrinsicOnly || !qc) continue;
-      var fx = qe.project.getVideoEffectByName(e.n);
-      if (!fx){ st.err = st.err || ('effet introuvable : ' + e.n); continue; }
-      qc.addVideoEffect(fx);
-      comp = clip.components[clip.components.numItems - 1];
-    }
-    for (j = 0; j < e.p.length; j++){
-      pr = e.p[j];
-      try { comp.properties[pr.i].setValue(pr.v, true); st.ok++; }
-      catch (x) { st.fail++; st.err = st.err || (e.n + ' : ' + x); }
-    }
+    if (i < n0){
+      if (clip.components[i].displayName === e.n) _setProps(clip.components[i], e, st);
+    } else extras.push(e);
+  }
+  if (intrinsicOnly || !extras.length) return st;
+
+  var qc = _qeClipFor(seq, trackIdx, clip);
+  if (!qc){ st.err = st.err || 'clip introuvable pour ajouter les effets'; return st; }
+
+  // Mode appris : true = les nouveaux effets se placent au-dessus des précédents.
+  var prepend = ($.global.lxtPrepend === undefined) ? true : $.global.lxtPrepend;
+  var order = [], k;
+  for (k = 0; k < extras.length; k++) order.push(prepend ? extras[extras.length - 1 - k] : extras[k]);
+
+  for (k = 0; k < order.length; k++){
+    e = order[k];
+    var fx = qe.project.getVideoEffectByName(e.n);
+    if (!fx){ st.err = st.err || ('effet introuvable : ' + e.n); continue; }
+    qc.addVideoEffect(fx);
+    comp = _newComponent(clip, e.n, n0, prepend);
+    if (comp) _setProps(comp, e, st);
+  }
+
+  // Vérifie l'ordre obtenu ; si faux, mémorise l'inverse pour la fois suivante.
+  var wrong = false;
+  for (k = 0; k < extras.length; k++){
+    if (n0 + k >= clip.components.numItems || clip.components[n0 + k].displayName !== extras[k].n) wrong = true;
+  }
+  if (wrong && extras.length > 1){
+    $.global.lxtPrepend = !prepend;
+    st.err = st.err || 'ordre des effets inversé : annulez (Cmd+Z) et relancez, c\'est corrigé pour les prochaines fois';
+  } else if (!wrong) {
+    $.global.lxtPrepend = prepend;
   }
   return st;
 }
