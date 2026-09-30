@@ -114,10 +114,11 @@
     $('bindings').innerHTML = '';
     bindings.forEach(function(b){
       var li = document.createElement('li');
-      li.innerHTML = '<span class="k"></span><span class="d"></span><button>✕</button>';
+      li.innerHTML = '<span class="k"></span><span class="d"></span><button title="Tester maintenant">▶</button><button>✕</button>';
       li.children[0].textContent = b.key;
       li.children[1].textContent = describe(b); li.children[1].title = describe(b);
-      li.children[2].onclick = function(){ bindings = bindings.filter(function(x){ return x !== b; }); save(); render(); };
+      li.children[2].onclick = function(){ run(b); };
+      li.children[3].onclick = function(){ bindings = bindings.filter(function(x){ return x !== b; }); save(); render(); };
       $('bindings').appendChild(li);
     });
     if (!bindings.length) $('bindings').innerHTML = '<li class="d">Aucune assignation.</li>';
@@ -139,6 +140,7 @@
     if (t === 'INPUT' && e.target.type !== 'checkbox' || t === 'SELECT') return;
     var k = combo(e); if (!k) return;
     var b = bindings.filter(function(x){ return x.key === k; })[0];
+    status('Touche reçue : ' + k + (b ? '' : ' (non assignée)'));
     if (b){ e.preventDefault(); run(b); }
   });
 
