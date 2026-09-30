@@ -103,6 +103,8 @@ function captureSelection(){
         nodeId: s.clip.projectItem.nodeId,
         track: s.track,
         duration: s.clip.end.seconds - s.clip.start.seconds,
+        inPoint: s.clip.inPoint.seconds,
+        outPoint: s.clip.outPoint.seconds,
         effects: _snapshotEffects(s.clip)
       });
     }
@@ -150,7 +152,25 @@ function applyLayers(specStr){
       if (!item){ skipped.push(L.name || L.nodeId); continue; }
       var ti = Math.min(L.track, seq.videoTracks.numTracks - 1);
       tr = seq.videoTracks[ti];
-      tr.overwriteClip(item, pos);
+      // La durée doit être fixée AVANT l'insertion : l'écrasement supprime tout ce qui
+      // se trouve sous la durée complète du média, et le raccourcir après ne le restaure pas.
+      var oldIn = null, oldOut = null, inS, outS;
+      try { oldIn = item.getInPoint().seconds; oldOut = item.getOutPoint().seconds; } catch (e4) {}
+      inS = (L.inPoint !== undefined && L.inPoint !== null) ? L.inPoint : (oldIn || 0);
+      outS = (L.outPoint !== undefined && L.outPoint !== null && L.outPoint > inS) ? L.outPoint : inS + L.duration;
+      try {
+        if (oldOut !== null && inS >= oldOut){ item.setOutPoint(outS, 4); item.setInPoint(inS, 4); }
+        else { item.setInPoint(inS, 4); item.setOutPoint(outS, 4); }
+      } catch (e5) {
+        skipped.push((L.name || L.nodeId) + ' (durée non réglable : ' + e5 + ')');
+        continue;
+      }
+      var placeErr = null;
+      try { tr.overwriteClip(item, pos); } catch (e6) { placeErr = e6; }
+      try {
+        if (oldIn !== null && oldOut !== null){ item.setOutPoint(oldOut, 4); item.setInPoint(oldIn, 4); }
+      } catch (e7) {}
+      if (placeErr) throw placeErr;
       audioRemoved += _removeLinkedAudio(seq, pos, L.nodeId);
       cl = null;
       for (c = 0; c < tr.clips.numItems; c++){
