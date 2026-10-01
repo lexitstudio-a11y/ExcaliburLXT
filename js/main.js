@@ -4,7 +4,7 @@
   var $ = function(id){ return document.getElementById(id); };
   var bindings = load();
   var captured = [];
-  var pendingKey = '';
+  var pendingKey = '', pendingCode = null, pendingMods = null;
 
   function load(){ try { return JSON.parse(localStorage.getItem(STORE)) || []; } catch(e){ return []; } }
   function save(){ try { localStorage.setItem(STORE, JSON.stringify(bindings)); } catch(e){} }
@@ -43,12 +43,13 @@
   $('keyField').addEventListener('keydown', function(e){
     e.preventDefault(); e.stopPropagation();
     var k = combo(e); if (!k) return;
+    pendingCode = e.code; pendingMods = {ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey};
     if (isReserved(k)){ pendingKey = ''; this.value = k; setKeyMsg('« ' + k + ' » est déjà utilisée par Première Pro.'); return; }
     var dup = bindings.filter(function(b){ return b.key === k; })[0];
     pendingKey = k; this.value = k;
     setKeyMsg(dup ? 'Déjà assignée : elle sera remplacée.' : 'Touche libre.', !dup);
   });
-  $('clearKey').onclick = function(){ pendingKey = ''; $('keyField').value = ''; setKeyMsg(''); };
+  $('clearKey').onclick = function(){ pendingKey = ''; pendingCode = null; pendingMods = null; $('keyField').value = ''; setKeyMsg(''); };
 
   // ---- UI ----
   $('type').onchange = function(){
@@ -93,7 +94,7 @@
   };
   function save1(){
     if (!pendingKey) return setKeyMsg('Choisissez une touche libre.');
-    var b = {key: pendingKey};
+    var b = {key: pendingKey, code: pendingCode, mods: pendingMods};
     if ($('type').value === 'layers'){
       if (!captured.length) return setKeyMsg('Capturez au moins un calque.');
       b.type = 'layers'; b.layers = captured; b.keepEffects = $('keepEffects').checked;
@@ -104,7 +105,7 @@
     }
     bindings = bindings.filter(function(x){ return x.key !== b.key; });
     bindings.push(b); save(); render();
-    captured = []; renderCaptured(); pendingKey = ''; $('keyField').value = ''; setKeyMsg('Assigné.', true);
+    captured = []; renderCaptured(); pendingKey = ''; pendingCode = null; pendingMods = null; $('keyField').value = ''; setKeyMsg('Assigné.', true);
   }
 
   function describe(b){
@@ -118,7 +119,7 @@
       var li = document.createElement('li');
       li.innerHTML = '<span class="k"></span><span class="d"></span><button title="Tester maintenant">▶</button><button>✕</button>';
       li.children[0].textContent = b.key;
-      li.children[1].textContent = describe(b); li.children[1].title = describe(b);
+      li.children[1].textContent = describe(b) + (b.code ? '' : ' (à réassigner pour la timeline)'); li.children[1].title = li.children[1].textContent;
       li.children[2].onclick = function(){ run(b); };
       li.children[3].onclick = function(){ bindings = bindings.filter(function(x){ return x !== b; }); save(); render(); };
       $('bindings').appendChild(li);
@@ -251,6 +252,105 @@
     });
   };
 
+  // ---- passerelle locale pour Hammerspoon (touches depuis la timeline) ----
+  var MACCODE = {KeyA:0,KeyS:1,KeyD:2,KeyF:3,KeyH:4,KeyG:5,KeyZ:6,KeyX:7,KeyC:8,KeyV:9,IntlBackslash:10,KeyB:11,KeyQ:12,KeyW:13,KeyE:14,KeyR:15,KeyY:16,KeyT:17,Digit1:18,Digit2:19,Digit3:20,Digit4:21,Digit6:22,Digit5:23,Equal:24,Digit9:25,Digit7:26,Minus:27,Digit8:28,Digit0:29,BracketRight:30,KeyO:31,KeyU:32,BracketLeft:33,KeyI:34,KeyP:35,Enter:36,KeyL:37,KeyJ:38,Quote:39,KeyK:40,Semicolon:41,Backslash:42,Comma:43,Slash:44,KeyN:45,KeyM:46,Period:47,Tab:48,Space:49,Backquote:50,Backspace:51,Escape:53,F1:122,F2:120,F3:99,F4:118,F5:96,F6:97,F7:98,F8:100,F9:101,F10:109,F11:103,F12:111,Numpad0:82,Numpad1:83,Numpad2:84,Numpad3:85,Numpad4:86,Numpad5:87,Numpad6:88,Numpad7:89,Numpad8:91,Numpad9:92,ArrowLeft:123,ArrowRight:124,ArrowDown:125,ArrowUp:126};
+  function fromLabel(label){
+    var parts = label.split('+'), k = parts.pop(), mods = {ctrl:false, meta:false, alt:false, shift:false}, code = null;
+    parts.forEach(function(m){ if (m === 'Ctrl') mods.meta = true; if (m === 'Alt') mods.alt = true; if (m === 'Shift') mods.shift = true; });
+    if (/^[A-Z]$/.test(k)) code = 'Key' + k;
+    else if (/^\d$/.test(k)) code = 'Digit' + k;
+    else if (/^F\d+$/.test(k)) code = k;
+    else if (/^Num\d$/.test(k)) code = 'Numpad' + k.slice(3);
+    return {code: code, mods: mods};
+  }
+
+  var PORT = 47820, TOKEN_KEY = 'excaliburlxt.token', server = null;
+  function getToken(){
+    var t = null; try { t = localStorage.getItem(TOKEN_KEY); } catch(e){}
+    if (!t){
+      t = Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
+      try { localStorage.setItem(TOKEN_KEY, t); } catch(e){}
+    }
+    return t;
+  }
+  function startServer(attempt){
+    var http, qs;
+    try { http = nodeReq('http'); qs = nodeReq('querystring'); } catch(e){ return; }
+    server = http.createServer(function(req, res){
+      var m = /^\/run\?(.*)$/.exec(req.url || ''), q = m ? qs.parse(m[1]) : {};
+      function out(code, body){ res.writeHead(code, {'Content-Type': 'text/plain'}); res.end(body); }
+      if (!m || q.token !== getToken()) return out(403, 'denied');
+      if (!$('armed').checked) return out(200, 'off');
+      var b = bindings.filter(function(x){ return x.key === q.key; })[0];
+      if (!b) return out(200, 'none');
+      status('Touche globale : ' + b.key);
+      run(b);
+      out(200, 'ok');
+    });
+    server.on('error', function(err){
+      server = null;
+      if (err && err.code === 'EADDRINUSE' && attempt < 8) setTimeout(function(){ startServer(attempt + 1); }, 1000);
+      else status('Serveur local indisponible : ' + (err && err.message));
+    });
+    server.listen(PORT, '127.0.0.1');
+  }
+  window.addEventListener('beforeunload', function(){ try { if (server) server.close(); } catch(e){} });
+  startServer(0);
+
+  $('genGlobal').onclick = function(){
+    var fs, os, pathMod, msg = $('globalMsg');
+    try { fs = nodeReq('fs'); os = nodeReq('os'); pathMod = nodeReq('path'); } catch(e){ msg.textContent = 'Node.js indisponible.'; return; }
+    var ok = bindings.filter(function(b){ return b.code && MACCODE[b.code] !== undefined; });
+    var bad = bindings.filter(function(b){ return ok.indexOf(b) === -1; });
+    var lua = ['-- Généré par ExcaliburLXT. Ne pas modifier : régénéré depuis le panneau.',
+      'local TOKEN = ' + JSON.stringify(getToken()),
+      'local hks = {}',
+      'local function isPremiere(app) return app ~= nil and app:name() ~= nil and string.find(app:name(), "Premiere") ~= nil end',
+      'local function bindKey(mods, code, label)',
+      '  local hk',
+      '  hk = hs.hotkey.new(mods, code, function()',
+      '    local url = "http://127.0.0.1:' + PORT + '/run?token=" .. TOKEN .. "&key=" .. hs.http.encodeForQuery(label)',
+      '    hs.http.doAsyncGet(url, nil, function(status, body)',
+      '      if status ~= 200 or body ~= "ok" then',
+      '        hk:disable()',
+      '        hs.eventtap.keyStroke(mods, hs.keycodes.map[code] or code, 0)',
+      '        hs.timer.doAfter(0.05, function() hk:enable() end)',
+      '      end',
+      '    end)',
+      '  end)',
+      '  table.insert(hks, hk)',
+      'end'];
+    ok.forEach(function(b){
+      var mods = [];
+      if (b.mods && b.mods.ctrl) mods.push('"ctrl"');
+      if (b.mods && b.mods.meta) mods.push('"cmd"');
+      if (b.mods && b.mods.alt) mods.push('"alt"');
+      if (b.mods && b.mods.shift) mods.push('"shift"');
+      lua.push('bindKey({' + mods.join(',') + '}, ' + MACCODE[b.code] + ', ' + JSON.stringify(b.key) + ')');
+    });
+    lua = lua.concat([
+      'local function setEnabled(on) for _, hk in ipairs(hks) do if on then hk:enable() else hk:disable() end end end',
+      'setEnabled(isPremiere(hs.application.frontmostApplication()))',
+      'if lxtWatcher then lxtWatcher:stop() end',
+      'lxtWatcher = hs.application.watcher.new(function(name, event, app)',
+      '  if event == hs.application.watcher.activated then setEnabled(isPremiere(app))',
+      '  elseif event == hs.application.watcher.deactivated and isPremiere(app) then setEnabled(false) end',
+      'end)',
+      'lxtWatcher:start()', '']);
+    try {
+      var dir = pathMod.join(os.homedir(), '.hammerspoon');
+      fs.mkdirSync(dir, {recursive: true});
+      fs.writeFileSync(pathMod.join(dir, 'excaliburlxt.lua'), lua.join('\n'));
+      var init = pathMod.join(dir, 'init.lua'), cur = '';
+      try { cur = fs.readFileSync(init).toString(); } catch(e){}
+      if (cur.indexOf('excaliburlxt.lua') === -1)
+        fs.writeFileSync(init, cur + (cur && !/\n$/.test(cur) ? '\n' : '') + 'dofile(os.getenv("HOME") .. "/.hammerspoon/excaliburlxt.lua")\n');
+      msg.className = 'msg ok';
+      msg.textContent = ok.length + ' touche(s) écrites dans ~/.hammerspoon. Dans Hammerspoon : Reload Config.' +
+        (bad.length ? ' À réassigner : ' + bad.map(function(b){ return b.key; }).join(', ') + '.' : '');
+    } catch(e){ msg.className = 'msg'; msg.textContent = 'Échec : ' + e.message; }
+  };
+
   function freeKeys(){
     var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), digits = '0123456789'.split(''), i;
     var fk = [], num = [], sym = ['<','>',',',';',':','!','?','.','/','\\','-','=','[',']',"'",'`','+','*'];
@@ -272,7 +372,9 @@
   }).join('');
   $('free').onclick = function(e){
     if (e.target.tagName !== 'SPAN') return;
-    pendingKey = e.target.textContent; $('keyField').value = pendingKey; setKeyMsg('Touche libre.', true);
+    pendingKey = e.target.textContent; $('keyField').value = pendingKey;
+    var d = fromLabel(pendingKey); pendingCode = d.code; pendingMods = d.mods;
+    setKeyMsg(d.code ? 'Touche libre.' : 'Touche libre (non utilisable depuis la timeline : appuyez plutôt sur la touche).', true);
   };
 
   $('reserved').innerHTML = window.RESERVED_KEYS.map(function(k){ return '<span>' + k + '</span>'; }).join('');

@@ -22,3 +22,4 @@ li .d{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowr
 h3{font-size:12px;margin:10px 0 2px}
 #free .grp{margin:6px 0 2px;color:var(--mut)}
 #free span{display:inline-block;background:#0f2a17;border:1px solid #1f5b32;border-radius:3px;padding:0 4px;margin:1px;font-family:monospace;cursor:pointer}
+ol.hint{padding-left:18px;margin:4px 0}ol.hint li{display:list-item;border:0;padding:1px 0}

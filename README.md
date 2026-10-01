@@ -21,6 +21,13 @@ Raccourci : téléchargez le ZIP du dépôt (GitHub > Code > Download ZIP, branc
 - Vos assignations sont conservées lors d'une mise à jour.
 - Sans jeton, la mise à jour lit `files.txt` (liste des fichiers du plugin) via raw.githubusercontent.com, sans limite d'API. Tenez `files.txt` à jour quand un fichier est ajouté ou supprimé.
 
+## Touches depuis la timeline (Hammerspoon, macOS)
+Le panneau écoute en local (127.0.0.1:47820, protégé par un jeton). Hammerspoon capte vos touches uniquement quand Première Pro est au premier plan et les transmet au panneau ; si le panneau ne répond pas ou si « Raccourcis actifs » est décoché, la touche est renvoyée normalement à Première Pro.
+1. Installer Hammerspoon (hammerspoon.org) et lui accorder « Accessibilité ».
+2. Réassigner les touches (la position physique de la touche est mémorisée à l'assignation).
+3. Section « Touches depuis la timeline » > *Générer la configuration*, puis *Reload Config* dans Hammerspoon.
+À refaire après chaque ajout ou changement d'assignation. Attention : en saisie de texte dans Première Pro, décochez « Raccourcis actifs ».
+
 ## Limites (API Adobe)
 - Les touches ne sont interceptées que lorsque le **panneau a le focus** : CEP ne peut pas enregistrer de raccourci global. Cliquez dans le panneau (ou dockez-le) avant d'utiliser les touches.
 - Les effets conservés le sont avec leurs valeurs statiques ; les images clés ne sont pas copiées.

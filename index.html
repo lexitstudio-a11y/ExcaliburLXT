@@ -13,7 +13,7 @@
     <button id="update" title="Télécharger la dernière version depuis GitHub puis recharger">⬇ Mettre à jour</button>
   </span>
 </header>
-<div id="status" role="status">Prêt (v1.9)</div>
+<div id="status" role="status">Prêt (v2.0)</div>
 
 <section>
   <h2>Nouvelle assignation</h2>
@@ -53,6 +53,20 @@
 <section>
   <h2>Assignations</h2>
   <ul id="bindings"></ul>
+</section>
+
+<section>
+  <details>
+    <summary>Touches depuis la timeline (Hammerspoon)</summary>
+    <p class="hint">Sans ceci, les touches ne marchent que si le panneau a le focus. Avec Hammerspoon (gratuit, hammerspoon.org), elles marchent dans Première Pro entier.</p>
+    <ol class="hint">
+      <li>Installez Hammerspoon, ouvrez-le et accordez « Accessibilité » (Réglages Système &gt; Confidentialité).</li>
+      <li>Réassignez vos touches (celles créées avant cette version n'ont pas la position physique de la touche).</li>
+      <li>Cliquez ci-dessous, puis dans Hammerspoon : icône de la barre des menus &gt; <b>Reload Config</b>.</li>
+    </ol>
+    <button id="genGlobal">Générer la configuration Hammerspoon</button>
+    <div id="globalMsg" class="msg"></div>
+  </details>
 </section>
 
 <section>
