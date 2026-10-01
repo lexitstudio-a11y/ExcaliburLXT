@@ -176,6 +176,25 @@ function captureSelection(){
   } catch (e) { return _err(e.message || e); }
 }
 
+function _isFree(tr, s, e){
+  var c, cl;
+  for (c = 0; c < tr.clips.numItems; c++){
+    cl = tr.clips[c];
+    if (cl.start.seconds < e - 0.0005 && cl.end.seconds > s + 0.0005) return false;
+  }
+  return true;
+}
+
+// Piste vidéo libre la plus basse (index le plus petit) strictement après `after`, libre sur [s, e].
+function _lowestFreeTrack(seq, after, s, e){
+  var t, locked;
+  for (t = after + 1; t < seq.videoTracks.numTracks; t++){
+    locked = false; try { locked = seq.videoTracks[t].isLocked(); } catch (x) {}
+    if (!locked && _isFree(seq.videoTracks[t], s, e)) return t;
+  }
+  return -1;
+}
+
 function _removeLinkedAudio(seq, pos, nodeId){
   var a, c, cl, n = 0;
   for (a = 0; a < seq.audioTracks.numTracks; a++){
@@ -199,7 +218,20 @@ function applyLayers(specStr){
     var spec = eval('(' + specStr + ')');
     seq = _seq();
     var pos = seq.getPlayerPosition().seconds;
-    var i, L, item, tr, c, cl, placed = 0, skipped = [], t, a;
+    var i, L, item, tr, c, cl, placed = 0, skipped = [], t, a, tracksUsed = [], lastTrack = -1;
+
+    // Si des clips sont sélectionnés dans la timeline, les calques épousent leur début et leur fin.
+    var sel = _selectedClips(seq), start = pos, spanLen = null, k;
+    if (sel.length){
+      var smin = sel[0].clip.start.seconds, smax = sel[0].clip.end.seconds;
+      for (k = 1; k < sel.length; k++){
+        if (sel[k].clip.start.seconds < smin) smin = sel[k].clip.start.seconds;
+        if (sel[k].clip.end.seconds > smax) smax = sel[k].clip.end.seconds;
+      }
+      start = smin; spanLen = smax - smin;
+    }
+    // On garde l'ordre d'empilement d'origine (piste la plus basse d'abord).
+    spec.layers.sort(function(x, y){ return x.track - y.track; });
     var stats = {ok: 0, fail: 0, err: ''}, audioRemoved = 0, endErr = '';
     app.enableQE();
 
@@ -214,34 +246,43 @@ function applyLayers(specStr){
       L = spec.layers[i];
       item = _findItem(app.project.rootItem, L.nodeId);
       if (!item){ skipped.push(L.name || L.nodeId); continue; }
-      var ti = Math.min(L.track, seq.videoTracks.numTracks - 1);
+      var want = (spanLen !== null) ? spanLen : L.duration;
+      var ti = _lowestFreeTrack(seq, lastTrack, start, start + want);
+      if (ti < 0){ skipped.push((L.name || L.nodeId) + ' (aucune piste vidéo libre)'); continue; }
       tr = seq.videoTracks[ti];
-      // La durée doit être fixée AVANT l'insertion : l'écrasement supprime tout ce qui
-      // se trouve sous la durée complète du média, et le raccourcir après ne le restaure pas.
-      var oldIn = null, oldOut = null, inS, outS;
+      // La durée doit être fixée AVANT l'insertion. Ici la piste est libre sur toute la durée visée,
+      // donc rien n'est écrasé.
+      var oldIn = null, oldOut = null, inS, outS, durSet = want;
       try { oldIn = item.getInPoint().seconds; oldOut = item.getOutPoint().seconds; } catch (e4) {}
       inS = (L.inPoint !== undefined && L.inPoint !== null) ? L.inPoint : (oldIn || 0);
-      outS = (L.outPoint !== undefined && L.outPoint !== null && L.outPoint > inS) ? L.outPoint : inS + L.duration;
-      try {
-        if (oldOut !== null && inS >= oldOut){ item.setOutPoint(outS, 4); item.setInPoint(inS, 4); }
-        else { item.setInPoint(inS, 4); item.setOutPoint(outS, 4); }
-      } catch (e5) {
-        skipped.push((L.name || L.nodeId) + ' (durée non réglable : ' + e5 + ')');
+      var okSet = false, tryDur = [want, L.duration], d;
+      for (d = 0; d < tryDur.length && !okSet; d++){
+        outS = inS + tryDur[d];
+        try {
+          if (oldOut !== null && inS >= oldOut){ item.setOutPoint(outS, 4); item.setInPoint(inS, 4); }
+          else { item.setInPoint(inS, 4); item.setOutPoint(outS, 4); }
+          okSet = true; durSet = tryDur[d];
+        } catch (e5) {}
+      }
+      if (!okSet){
+        skipped.push((L.name || L.nodeId) + ' (durée non réglable)');
         continue;
       }
       var placeErr = null;
-      try { tr.overwriteClip(item, pos); } catch (e6) { placeErr = e6; }
+      try { tr.overwriteClip(item, start); } catch (e6) { placeErr = e6; }
       try {
         if (oldIn !== null && oldOut !== null){ item.setOutPoint(oldOut, 4); item.setInPoint(oldIn, 4); }
       } catch (e7) {}
       if (placeErr) throw placeErr;
-      audioRemoved += _removeLinkedAudio(seq, pos, L.nodeId);
+      audioRemoved += _removeLinkedAudio(seq, start, L.nodeId);
       cl = null;
       for (c = 0; c < tr.clips.numItems; c++){
-        if (Math.abs(tr.clips[c].start.seconds - pos) < 0.001){ cl = tr.clips[c]; break; }
+        if (Math.abs(tr.clips[c].start.seconds - start) < 0.001){ cl = tr.clips[c]; break; }
       }
       if (!cl) continue;
-      t = new Time(); t.seconds = pos + L.duration;
+      lastTrack = ti; tracksUsed.push('V' + (ti + 1));
+      // Ajuste la fin exacte (rallonge un calque d'effet ou une image fixe si nécessaire).
+      t = new Time(); t.seconds = start + want;
       try { cl.end = t; } catch (e1) { endErr = String(e1); }
       if (L.effects){
         var r = _restoreEffects(seq, ti, cl, L.effects, !spec.keepEffects);
@@ -251,7 +292,7 @@ function applyLayers(specStr){
     }
     for (a = 0; a < untargeted.length; a++){ try { seq.audioTracks[untargeted[a]].setTargeted(true, true); } catch (e2) {} }
     return _ok({placed: placed, skipped: skipped, valuesOk: stats.ok, valuesFail: stats.fail,
-                err: stats.err || endErr, audioRemoved: audioRemoved});
+                err: stats.err || endErr, audioRemoved: audioRemoved, tracks: tracksUsed, fitted: spanLen !== null});
   } catch (e) {
     try { if (seq) for (a = 0; a < untargeted.length; a++) seq.audioTracks[untargeted[a]].setTargeted(true, true); } catch (e3) {}
     return _err(e.message || e);
